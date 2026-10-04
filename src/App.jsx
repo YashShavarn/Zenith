@@ -8,6 +8,12 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [isLogin, setIsLogin] = useState(true);
   
+  // New Auth State for Phone & Google
+  const [authMethod, setAuthMethod] = useState('email'); // 'email' or 'phone'
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [isOtpSent, setIsOtpSent] = useState(false);
+  
   const [showSplash, setShowSplash] = useState(true);
   const [currentTab, setCurrentTab] = useState('home'); 
   
@@ -143,7 +149,7 @@ export default function App() {
     }
 
     const userId = session.user.id;
-    const defaultUsername = email ? email.split('@')[0] : 'Aspirant';
+    const defaultUsername = session.user.email ? session.user.email.split('@')[0] : (session.user.phone ? session.user.phone : 'Aspirant');
     
     const { error } = await supabase.from('profiles').upsert({
       id: userId,
@@ -181,7 +187,6 @@ export default function App() {
     }
   };
 
-  // Subscription Cancellation & Refund Handler
   const handleCancelSubscription = async () => {
     const confirmCancel = window.confirm("Are you sure you want to cancel your subscription and request a refund within 2 days?");
     if (!confirmCancel) return;
@@ -195,7 +200,6 @@ export default function App() {
     }
   };
 
-  // Razorpay Checkout Integration
   const handlePaymentSubmit = () => {
     if (!window.Razorpay) {
       alert("Razorpay SDK failed to load. Please check your internet connection.");
@@ -206,7 +210,7 @@ export default function App() {
 
     const options = {
       key: import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_TjlgHj0Mll46st",
-      amount: currentPrice * 100, // Amount in currency subunits (paise)
+      amount: currentPrice * 100, 
       currency: "INR",
       name: "Zenith",
       description: "Zenith PRO Yearly Subscription",
@@ -435,6 +439,7 @@ export default function App() {
   const circleCircumference = 2 * Math.PI * circleRadius;
   const strokeDashoffset = circleCircumference - progressPercent * circleCircumference;
 
+  // Authenticators
   const handleAuth = async (e) => {
     e.preventDefault();
     if (isLogin) {
@@ -447,6 +452,30 @@ export default function App() {
       else if (data.user) {
         setSession(data.session);
         setNeedsOnboarding(true);
+      }
+    }
+  };
+
+  const handleGoogleAuth = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin }
+    });
+    if (error) alert(error.message);
+  };
+
+  const handlePhoneAuth = async (e) => {
+    e.preventDefault();
+    if (!isOtpSent) {
+      const { error } = await supabase.auth.signInWithOtp({ phone });
+      if (error) alert("Error sending OTP: " + error.message);
+      else setIsOtpSent(true);
+    } else {
+      const { data, error } = await supabase.auth.verifyOtp({ phone, token: otp, type: 'sms' });
+      if (error) alert("Invalid OTP: " + error.message);
+      else if (data?.session) {
+        setSession(data.session);
+        checkProfile(data.session.user.id);
       }
     }
   };
@@ -480,13 +509,54 @@ export default function App() {
             <h1 className="text-3xl font-black tracking-[0.2em] text-white mb-2">ZENITH</h1>
             <p className="text-xs text-gray-400">Master your focus discipline.</p>
           </div>
-          <form onSubmit={handleAuth} className="bg-[#11151d] p-6 rounded-3xl border border-white/[0.07] shadow-2xl space-y-4">
+          <div className="bg-[#11151d] p-6 rounded-3xl border border-white/[0.07] shadow-2xl space-y-4">
             <h2 className="text-sm font-bold text-gray-200 mb-2">{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
-            <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full zenith-input bg-[#090b10] text-white px-4 py-3.5 rounded-2xl border border-white/[0.07] focus:border-[#7c5cff] focus:ring-2 focus:ring-[#7c5cff]/10 outline-none text-xs" />
-            <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full zenith-input bg-[#090b10] text-white px-4 py-3.5 rounded-2xl border border-white/[0.07] focus:border-[#7c5cff] focus:ring-2 focus:ring-[#7c5cff]/10 outline-none text-xs" />
-            <button type="submit" className="w-full zenith-primary bg-[#7c5cff] hover:bg-[#6847f5] shadow-[0_10px_30px_rgba(124,92,255,0.22)] text-white font-bold py-3.5 rounded-2xl transition-all text-xs cursor-pointer">{isLogin ? 'Sign In' : 'Sign Up'}</button>
-            <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full mt-2 text-xs text-gray-400 hover:text-white">{isLogin ? "Need an account? Sign up" : "Have an account? Log in"}</button>
-          </form>
+            
+            {/* GOOGLE AUTH BUTTON */}
+            <button onClick={handleGoogleAuth} type="button" className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-black font-bold py-3.5 rounded-2xl transition-all text-xs cursor-pointer shadow-md">
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              Continue with Google
+            </button>
+
+            <div className="relative flex items-center py-2">
+              <div className="flex-grow border-t border-white/[0.07]"></div>
+              <span className="flex-shrink-0 mx-4 text-gray-500 text-[10px] font-bold uppercase tracking-wider">OR</span>
+              <div className="flex-grow border-t border-white/[0.07]"></div>
+            </div>
+
+            {/* AUTH METHOD TOGGLE */}
+            <div className="flex bg-[#090b10] rounded-xl p-1 border border-white/[0.07]">
+              <button type="button" onClick={() => {setAuthMethod('email'); setIsOtpSent(false);}} className={`flex-1 py-2 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${authMethod === 'email' ? 'bg-[#7c5cff]/20 text-[#a99cff]' : 'text-gray-400'}`}>Email</button>
+              <button type="button" onClick={() => {setAuthMethod('phone'); setIsLogin(true);}} className={`flex-1 py-2 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${authMethod === 'phone' ? 'bg-[#7c5cff]/20 text-[#a99cff]' : 'text-gray-400'}`}>Phone</button>
+            </div>
+
+            {authMethod === 'email' ? (
+              <form onSubmit={handleAuth} className="space-y-4">
+                <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full zenith-input bg-[#090b10] text-white px-4 py-3.5 rounded-2xl border border-white/[0.07] focus:border-[#7c5cff] focus:ring-2 focus:ring-[#7c5cff]/10 outline-none text-xs" />
+                <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full zenith-input bg-[#090b10] text-white px-4 py-3.5 rounded-2xl border border-white/[0.07] focus:border-[#7c5cff] focus:ring-2 focus:ring-[#7c5cff]/10 outline-none text-xs" />
+                <button type="submit" className="w-full zenith-primary bg-[#7c5cff] hover:bg-[#6847f5] shadow-[0_10px_30px_rgba(124,92,255,0.22)] text-white font-bold py-3.5 rounded-2xl transition-all text-xs cursor-pointer">{isLogin ? 'Sign In' : 'Sign Up'}</button>
+              </form>
+            ) : (
+              <form onSubmit={handlePhoneAuth} className="space-y-4">
+                <input type="tel" placeholder="Mobile Number (e.g., +919876543210)" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={isOtpSent} required className="w-full zenith-input bg-[#090b10] text-white px-4 py-3.5 rounded-2xl border border-white/[0.07] focus:border-[#7c5cff] focus:ring-2 focus:ring-[#7c5cff]/10 outline-none text-xs disabled:opacity-50" />
+                {isOtpSent && (
+                  <input type="text" placeholder="Enter 6-digit OTP" value={otp} onChange={(e) => setOtp(e.target.value)} required className="w-full zenith-input bg-[#090b10] text-white px-4 py-3.5 rounded-2xl border border-white/[0.07] focus:border-[#7c5cff] focus:ring-2 focus:ring-[#7c5cff]/10 outline-none text-xs tracking-widest text-center" />
+                )}
+                <button type="submit" className="w-full zenith-primary bg-[#7c5cff] hover:bg-[#6847f5] shadow-[0_10px_30px_rgba(124,92,255,0.22)] text-white font-bold py-3.5 rounded-2xl transition-all text-xs cursor-pointer">
+                  {isOtpSent ? 'Verify & Login' : 'Send OTP'}
+                </button>
+              </form>
+            )}
+
+            {authMethod === 'email' && (
+              <button type="button" onClick={() => setIsLogin(!isLogin)} className="w-full text-xs text-gray-400 hover:text-white cursor-pointer">{isLogin ? "Need an account? Sign up" : "Have an account? Log in"}</button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -942,7 +1012,7 @@ export default function App() {
                     </h2>
                   )}
 
-                  <p className="text-xs text-gray-400">{session?.user?.email}</p>
+                  <p className="text-xs text-gray-400">{session?.user?.email || session?.user?.phone}</p>
                   <p className="text-xs text-gray-500 mt-1">Focusing since Sept, 2026</p>
                 </div>
                 
