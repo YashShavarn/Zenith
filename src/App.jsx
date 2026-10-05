@@ -1,6 +1,94 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient'; 
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Public domain audio streams for soundscapes and chimes
+const SOUNDTRACKS = {
+  off: { name: 'Mute', url: null },
+  rain: { name: 'Gentle Rain', url: 'https://cdn.pixabay.com/download/audio/2021/08/09/audio_02330a103d.mp3?filename=light-rain-ambient-114354.mp3', isPro: false },
+  lofi: { name: 'Lo-Fi Study', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf756.mp3?filename=lofi-study-112191.mp3', isPro: true },
+  whitenoise: { name: 'White Noise', url: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=white-noise-ambient-6241.mp3', isPro: true }
+};
+
+const CHIME_URL = 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c3a647d7.mp3?filename=notification-bell-ipone-100412.mp3';
+
+function FocusAudioPlayer({ isPro, onTriggerProModal, chimeRef }) {
+  const [currentSound, setCurrentSound] = useState('off');
+  const audioRef = useRef(null);
+
+  // Handle ambient background audio looping
+  useEffect(() => {
+    if (currentSound === 'off' || !SOUNDTRACKS[currentSound].url) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      return;
+    }
+
+    const track = SOUNDTRACKS[currentSound];
+
+    // Check PRO restriction
+    if (track.isPro && !isPro) {
+      onTriggerProModal();
+      setCurrentSound('off');
+      return;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+
+    const audio = new Audio(track.url);
+    audio.loop = true;
+    audio.volume = 0.4;
+    audio.play().catch((err) => console.log("Audio autoplay blocked:", err));
+    audioRef.current = audio;
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, [currentSound, isPro, onTriggerProModal]);
+
+  const playTestChime = () => {
+    if (chimeRef.current) {
+      chimeRef.current.currentTime = 0;
+      chimeRef.current.play().catch((err) => console.log("Chime blocked:", err));
+    }
+  };
+
+  return (
+    <div className="bg-slate-900/60 backdrop-blur-md p-4 rounded-xl border border-slate-800 flex flex-col gap-3 max-w-md mx-auto mt-4 text-white">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-slate-300">Focus Soundscapes</span>
+        <button 
+          onClick={playTestChime} 
+          className="text-xs text-indigo-400 hover:text-indigo-300 underline cursor-pointer"
+        >
+          Test Chime 🔔
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {Object.entries(SOUNDTRACKS).map(([key, track]) => (
+          <button
+            key={key}
+            onClick={() => setCurrentSound(key)}
+            className={`px-3 py-2 rounded-lg text-xs font-medium transition flex items-center justify-between cursor-pointer ${
+              currentSound === key 
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' 
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+            }`}
+          >
+            <span>{track.name}</span>
+            {track.isPro && !isPro && <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1 py-0.5 rounded">PRO</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -80,6 +168,19 @@ export default function App() {
   const [blocksState, setBlocksState] = useState({ youtubeShorts: true, igReels: false, fbReels: false });
   const [blockedWebsites, setBlockedWebsites] = useState(['instagram.com', 'discord.com']);
   const [newWebsiteBlocksInput, setNewWebsiteBlocksInput] = useState('');
+
+  // Audio Ref for Completion Chime
+  const chimeRef = useRef(null);
+  useEffect(() => {
+    chimeRef.current = new Audio(CHIME_URL);
+  }, []);
+
+  const playCompletionChime = () => {
+    if (chimeRef.current) {
+      chimeRef.current.currentTime = 0;
+      chimeRef.current.play().catch((err) => console.log("Chime blocked:", err));
+    }
+  };
 
   const availableCategories = ['IIT JEE', 'NEET', 'Chartered Accountant (CA)', 'UPSC Civil Services', 'Class 12 Board', 'Class 10 Board', 'General Studies'];
 
@@ -385,6 +486,7 @@ export default function App() {
           const remaining = Math.max(pomodoroTarget - elapsed, 0);
           setTime(remaining);
           if (remaining === 0) {
+            playCompletionChime();
             handleEndStudy();
             alert("Pomodoro session completed! Take a break.");
           }
@@ -721,6 +823,11 @@ export default function App() {
                 </div>
               </div>
               </div>
+            </div>
+
+            {/* FOCUS SOUNDSCAPES AUDIO PLAYER COMPONENT */}
+            <div className="max-w-md mx-auto px-6 mb-4">
+              <FocusAudioPlayer isPro={isPro} onTriggerProModal={() => setShowSubscription(true)} chimeRef={chimeRef} />
             </div>
 
             <div className="mx-6 zenith-card bg-[#11151d]/90 backdrop-blur-xl border border-white/[0.07] rounded-[22px] p-4 flex items-center justify-between mb-28 max-w-md mx-auto">
